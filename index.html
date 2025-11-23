@@ -2,38 +2,41 @@
 <html lang="fr">
 <head>
 <meta charset="UTF-8">
-<title>DDA Street Fighter</title>
+<title>DDA Street Fighter – Prototype avancé</title>
 <style>
-body {
+  html, body {
     margin:0;
+    padding:0;
     background:#000;
+    height:100%;
+  }
+  body {
     display:flex;
     justify-content:center;
     align-items:center;
-    height:100vh;
-}
-#gameWrapper {
+    font-family:system-ui, sans-serif;
+  }
+  #gameWrapper {
     border:4px solid gold;
     border-radius:25px;
     overflow:hidden;
-}
-canvas {
-    background:#222;
+  }
+  canvas {
     display:block;
-}
+    background:#111;
+  }
 </style>
 </head>
 <body>
 
 <div id="gameWrapper">
-    <canvas id="dda-fight" width="900" height="500"></canvas>
+  <canvas id="dda-fight" width="900" height="500"></canvas>
 </div>
 
 <script>
-/* ===============================
-   JEU STREET FIGHTER DDA SIMPLIFIÉ
-   =============================== */
-
+// ===============================
+// CONFIG DE BASE
+// ===============================
 var canvas = document.getElementById("dda-fight");
 var ctx = canvas.getContext("2d");
 
@@ -41,15 +44,106 @@ var GROUND_Y = 420;
 var GRAVITY = 0.7;
 
 var keys = {};
-var gameState = "fight";
+var gameState = "select"; // select | fight | ko
 
-function createFighter(name, role, color, accent, side) {
+// ===============================
+// ROSTER DES PERSONNAGES
+// ===============================
+var heroes = [
+  {
+    id: "docness",
+    name: "Docness",
+    role: "Producteur clean",
+    color: "#222222",
+    accent: "#FFD700",
+    speed: 3.1,
+    power: 9
+  },
+  {
+    id: "lion_scot",
+    name: "Lion Scot",
+    role: "Présentateur open mic",
+    color: "#884400",
+    accent: "#FFAA00",
+    speed: 2.7,
+    power: 7
+  },
+  {
+    id: "dda",
+    name: "DDA",
+    role: "Ingé / Stratège",
+    color: "#444466",
+    accent: "#FF44AA",
+    speed: 3.4,
+    power: 8
+  }
+];
+
+var industry = [
+  {
+    id: "major_boss",
+    name: "Patron Major",
+    role: "Contrats toxiques",
+    color: "#111111",
+    accent: "#888888",
+    speed: 2.8,
+    power: 8
+  },
+  {
+    id: "label_lawyer",
+    name: "Avocat du Label",
+    role: "Petites lignes",
+    color: "#222244",
+    accent: "#AA0000",
+    speed: 3.0,
+    power: 7
+  },
+  {
+    id: "ghost_manager",
+    name: "Manager Fantôme",
+    role: "Commissions partout",
+    color: "#333333",
+    accent: "#00DDDD",
+    speed: 3.2,
+    power: 6
+  },
+  {
+    id: "ego_rapper",
+    name: "Rappeur Ego",
+    role: "Vendu sans le savoir",
+    color: "#552244",
+    accent: "#FF00FF",
+    speed: 3.3,
+    power: 7
+  },
+  {
+    id: "angry_rapper",
+    name: "Rappeur Enragé",
+    role: "Racket & perso perdu",
+    color: "#661111",
+    accent: "#FF5500",
+    speed: 3.5,
+    power: 6
+  }
+];
+
+var selectedHeroIndex = 0;
+var player1 = null;
+var player2 = null;
+var winnerText = "";
+
+// ===============================
+// OBJET COMBATTANT
+// ===============================
+function createFighter(config, side) {
   var baseX = (side === "left") ? 200 : 700;
   return {
-    name: name,
-    role: role,
-    color: color,
-    accent: accent,
+    name: config.name,
+    role: config.role,
+    color: config.color,
+    accent: config.accent,
+    speed: config.speed,
+    power: config.power,
     side: side,
     x: baseX,
     y: GROUND_Y,
@@ -65,48 +159,93 @@ function createFighter(name, role, color, accent, side) {
   };
 }
 
-// Personnages
-var player1 = createFighter("DDA", "Indépendant", "#444466", "#FF44AA", "left");
-var player2 = createFighter("Patron Major", "Industrie", "#111111", "#FFD700", "right");
-
-window.addEventListener("keydown", function(e){
+// ===============================
+// INPUT CLAVIER
+// ===============================
+window.addEventListener("keydown", function(e) {
   keys[e.key.toLowerCase()] = true;
+
+  if (gameState === "select") {
+    if (e.key.toLowerCase() === "d" || e.key.toLowerCase() === "arrowright") {
+      selectedHeroIndex = (selectedHeroIndex + 1) % heroes.length;
+    }
+    if (e.key.toLowerCase() === "q" || e.key.toLowerCase() === "arrowleft") {
+      selectedHeroIndex = (selectedHeroIndex - 1 + heroes.length) % heroes.length;
+    }
+    if (e.key === "Enter") {
+      startFight();
+    }
+  } else if (gameState === "ko") {
+    if (e.key === "Enter") {
+      resetToSelect();
+    }
+  }
 });
-window.addEventListener("keyup", function(e){
+
+window.addEventListener("keyup", function(e) {
   keys[e.key.toLowerCase()] = false;
 });
 
+// ===============================
+// DÉMARRER / RESET COMBAT
+// ===============================
+function startFight() {
+  var heroConfig = heroes[selectedHeroIndex];
+  var enemyConfig = industry[Math.floor(Math.random() * industry.length)];
+
+  player1 = createFighter(heroConfig, "left");
+  player2 = createFighter(enemyConfig, "right");
+
+  winnerText = "";
+  gameState = "fight";
+}
+
+function resetToSelect() {
+  gameState = "select";
+  winnerText = "";
+}
+
+// ===============================
+// LOGIQUE COMBAT
+// ===============================
 function updateFight() {
+  if (!player1 || !player2) return;
+  if (gameState !== "fight") return;
+
+  // Joueur 1 (toi)
   player1.vx = 0;
-  if (keys["q"]) player1.vx = -3;
-  if (keys["d"]) player1.vx = 3;
+  if (keys["q"]) player1.vx = -player1.speed;
+  if (keys["d"]) player1.vx = player1.speed;
 
   if ((keys["z"] || keys["arrowup"]) && player1.onGround) {
     player1.vy = -13;
     player1.onGround = false;
   }
 
-  if (keys[" "] && !player1.attacking) {
+  if (keys[" "] && !player1.attacking && player1.attackTimer <= 0) {
     player1.attacking = true;
     player1.attackTimer = 10;
   }
 
-  // IA joueur 2
-  var distance = player1.x - player2.x;
-  player2.vx = (distance > 0 ? 2 : -2);
-
-  if (Math.abs(distance) < 80) {
-    if (!player2.attacking) {
-      player2.attacking = true;
-      player2.attackTimer = 10;
-    }
-  }
+  // IA ennemi
+  aiForPlayer2();
 
   applyPhysics(player1);
   applyPhysics(player2);
 
   handleAttacks(player1, player2);
   handleAttacks(player2, player1);
+
+  if (player1.health <= 0 || player2.health <= 0) {
+    gameState = "ko";
+    if (player1.health <= 0 && player2.health <= 0) {
+      winnerText = "Match nul : l’industrie et l’indépendant tombent ensemble...";
+    } else if (player1.health <= 0) {
+      winnerText = player2.name + " gagne. L’industrie a encore frappé.";
+    } else {
+      winnerText = player1.name + " gagne. Un artiste vient d’être libéré du système.";
+    }
+  }
 }
 
 function applyPhysics(f) {
@@ -132,76 +271,256 @@ function applyPhysics(f) {
 }
 
 function handleAttacks(attacker, defender) {
-  if (!attacker.attacking || attacker.hitCooldown > 0) return;
+  if (!attacker.attacking || attacker.attackTimer <= 0) return;
+  if (attacker.hitCooldown > 0) return;
 
   var dir = (attacker.side === "left") ? 1 : -1;
-  var hit = {
-    x: attacker.x + dir * 40,
-    y: attacker.y - attacker.h + 20,
-    w: 30,
-    h: 30
+  var hitbox = {
+    x: attacker.x + dir * 35,
+    y: attacker.y - attacker.h + 10,
+    w: 35,
+    h: attacker.h - 20
   };
 
-  var target = {
-    x: defender.x - defender.w/2,
+  var targetBox = {
+    x: defender.x - defender.w / 2,
     y: defender.y - defender.h,
     w: defender.w,
     h: defender.h
   };
 
-  if (hit.x < target.x + target.w &&
-      hit.x + hit.w > target.x &&
-      hit.y < target.y + target.h &&
-      hit.h + hit.y > target.y) {
+  if (rectsCollide(hitbox, targetBox)) {
+    var dmg = 8 + Math.floor(attacker.power / 2);
+    defender.health -= dmg;
+    if (defender.health < 0) defender.health = 0;
 
-      defender.health -= 10;
-      if (defender.health < 0) defender.health = 0;
+    defender.vx = dir * 4;
+    defender.vy = -4;
+    defender.onGround = false;
 
-      attacker.hitCooldown = 20;
+    attacker.hitCooldown = 20;
   }
 }
 
+function rectsCollide(a, b) {
+  return !(
+    a.x + a.w < b.x ||
+    a.x > b.x + b.w ||
+    a.y + a.h < b.y ||
+    a.y > b.y + b.h
+  );
+}
+
+// IA ennemi simple mais crédible
+function aiForPlayer2() {
+  if (!player2 || !player1) return;
+
+  player2.vx = 0;
+  var distance = player1.x - player2.x;
+
+  if (Math.abs(distance) > 90) {
+    if (distance > 0) {
+      player2.vx = player2.speed * 0.9;
+      player2.side = "left";
+    } else {
+      player2.vx = -player2.speed * 0.9;
+      player2.side = "right";
+    }
+  } else {
+    if (!player2.attacking && Math.random() < 0.06) {
+      player2.attacking = true;
+      player2.attackTimer = 10;
+    }
+    if (player2.onGround && Math.random() < 0.02) {
+      player2.vy = -11;
+      player2.onGround = false;
+    }
+  }
+}
+
+// ===============================
+// DESSIN
+// ===============================
 function drawBackground() {
-  ctx.fillStyle = "#111";
+  var grad = ctx.createLinearGradient(0, 0, 0, canvas.height);
+  grad.addColorStop(0, "#111122");
+  grad.addColorStop(0.5, "#222222");
+  grad.addColorStop(1, "#111111");
+  ctx.fillStyle = grad;
   ctx.fillRect(0, 0, canvas.width, canvas.height);
-  ctx.fillStyle = "#303030";
-  ctx.fillRect(0, GROUND_Y, canvas.width, 200);
+
+  ctx.fillStyle = "#202020";
+  ctx.fillRect(0, GROUND_Y + 1, canvas.width, canvas.height - GROUND_Y);
+
+  ctx.fillStyle = "#151515";
+  for (var i = 0; i < 8; i++) {
+    var w = 80;
+    var h = 120 + Math.random() * 40;
+    var x = i * 110 + 40;
+    ctx.fillRect(x, GROUND_Y - h - 40, w, h);
+  }
 }
 
 function drawFighter(f) {
-  var x = f.x - f.w/2;
-  var y = f.y - f.h;
+  if (!f) return;
+  var bodyX = f.x - f.w / 2;
+  var bodyY = f.y - f.h;
 
   ctx.fillStyle = "rgba(0,0,0,0.6)";
   ctx.beginPath();
-  ctx.ellipse(f.x, f.y, 30, 8, 0, 0, Math.PI*2);
+  ctx.ellipse(f.x, f.y + 5, 30, 8, 0, 0, Math.PI * 2);
   ctx.fill();
 
   ctx.fillStyle = f.color;
-  ctx.fillRect(x, y, f.w, f.h);
+  ctx.fillRect(bodyX, bodyY, f.w, f.h);
 
   ctx.fillStyle = f.accent;
-  ctx.fillRect(x+6, y-18, f.w-12, 18);
+  ctx.fillRect(bodyX + 8, bodyY - 18, f.w - 16, 18);
+
+  if (f.attacking && f.attackTimer > 0) {
+    var dir = (f.side === "left") ? 1 : -1;
+    ctx.fillStyle = "rgba(255,255,255,0.4)";
+    ctx.fillRect(bodyX + f.w / 2 + dir * 25, bodyY + 10, 30, 20);
+  }
 }
 
 function drawHealthBars() {
-  ctx.fillStyle = "#FFD700";
-  ctx.fillRect(20, 20, player1.health * 3, 20);
+  if (!player1 || !player2) return;
 
-  ctx.fillStyle = "#FFD700";
-  ctx.fillRect(900 - (player2.health * 3) - 20, 20, player2.health * 3, 20);
+  ctx.fillStyle = "rgba(0,0,0,0.7)";
+  ctx.fillRect(20, 20, 350, 40);
+  ctx.fillStyle = player1.accent;
+  ctx.fillRect(25, 25, 3.4 * player1.health, 30);
+
+  ctx.fillStyle = "#ffffff";
+  ctx.font = "14px system-ui";
+  ctx.fillText(player1.name + " – " + player1.role, 30, 18);
+
+  ctx.fillStyle = "rgba(0,0,0,0.7)";
+  ctx.fillRect(canvas.width - 370, 20, 350, 40);
+  ctx.fillStyle = player2.accent;
+  ctx.fillRect(canvas.width - 365 + (100 - player2.health) * 3.4, 25, 3.4 * player2.health, 30);
+
+  ctx.fillStyle = "#ffffff";
+  ctx.textAlign = "right";
+  ctx.fillText(player2.name + " – " + player2.role, canvas.width - 30, 18);
+  ctx.textAlign = "left";
 }
 
-function loop() {
-  updateFight();
+function drawSelectScreen() {
   drawBackground();
-  drawFighter(player1);
-  drawFighter(player2);
-  drawHealthBars();
-  requestAnimationFrame(loop);
+
+  ctx.fillStyle = "rgba(0,0,0,0.7)";
+  ctx.fillRect(100, 60, canvas.width - 200, canvas.height - 120);
+
+  ctx.fillStyle = "#FFD700";
+  ctx.font = "26px system-ui";
+  ctx.textAlign = "center";
+  ctx.fillText("Choisis ton combattant DDA", canvas.width / 2, 100);
+
+  ctx.font = "16px system-ui";
+  ctx.fillStyle = "#ffffff";
+  ctx.fillText("⇦ Q / D ⇨ pour choisir — Entrée pour valider", canvas.width / 2, 130);
+
+  var baseX = 220;
+  var spacing = 200;
+
+  for (var i = 0; i < heroes.length; i++) {
+    var h = heroes[i];
+    var x = baseX + i * spacing;
+    var y = 220;
+
+    ctx.strokeStyle = (i === selectedHeroIndex) ? "#FFD700" : "#888888";
+    ctx.lineWidth = (i === selectedHeroIndex) ? 4 : 2;
+    ctx.strokeRect(x - 60, y - 90, 120, 140);
+
+    ctx.fillStyle = h.color;
+    ctx.fillRect(x - 25, y - 60, 50, 70);
+    ctx.fillStyle = h.accent;
+    ctx.fillRect(x - 20, y - 80, 40, 20);
+
+    ctx.fillStyle = "#ffffff";
+    ctx.font = "16px system-ui";
+    ctx.fillText(h.name, x, y + 70);
+
+    ctx.font = "12px system-ui";
+    ctx.fillText(h.role, x, y + 90);
+  }
+
+  ctx.textAlign = "left";
 }
 
-loop();
+function drawKO() {
+  ctx.fillStyle = "rgba(0,0,0,0.7)";
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  ctx.fillStyle = "#FFD700";
+  ctx.font = "40px system-ui";
+  ctx.textAlign = "center";
+  ctx.fillText("K.O.", canvas.width / 2, 160);
+
+  ctx.fillStyle = "#ffffff";
+  ctx.font = "18px system-ui";
+  wrapTextCentered(winnerText, canvas.width / 2, 230, canvas.width - 120, 24);
+
+  ctx.fillStyle = "#AAAAAA";
+  ctx.font = "16px system-ui";
+  ctx.fillText("Entrée pour revenir au choix de personnage", canvas.width / 2, 360);
+
+  ctx.textAlign = "left";
+}
+
+function wrapTextCentered(text, cx, startY, maxWidth, lineHeight) {
+  var words = text.split(" ");
+  var line = "";
+  var y = startY;
+
+  ctx.textAlign = "center";
+  for (var i = 0; i < words.length; i++) {
+    var testLine = line + words[i] + " ";
+    var width = ctx.measureText(testLine).width;
+    if (width > maxWidth && i > 0) {
+      ctx.fillText(line, cx, y);
+      line = words[i] + " ";
+      y += lineHeight;
+    } else {
+      line = testLine;
+    }
+  }
+  ctx.fillText(line, cx, y);
+  ctx.textAlign = "left";
+}
+
+// ===============================
+// BOUCLE PRINCIPALE
+// ===============================
+function gameLoop() {
+  if (gameState === "select") {
+    drawSelectScreen();
+  } else if (gameState === "fight") {
+    updateFight();
+    drawBackground();
+    drawFighter(player1);
+    drawFighter(player2);
+    drawHealthBars();
+
+    ctx.fillStyle = "rgba(0,0,0,0.6)";
+    ctx.fillRect(0, canvas.height - 40, canvas.width, 40);
+    ctx.fillStyle = "#ffffff";
+    ctx.font = "14px system-ui";
+    ctx.fillText("Q/D = gauche/droite, Z = saut, Espace = coup de poing", 10, canvas.height - 18);
+  } else if (gameState === "ko") {
+    drawBackground();
+    drawFighter(player1);
+    drawFighter(player2);
+    drawHealthBars();
+    drawKO();
+  }
+
+  requestAnimationFrame(gameLoop);
+}
+
+gameLoop();
 </script>
 
 </body>
