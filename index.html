@@ -2,7 +2,7 @@
 <html lang="fr">
 <head>
 <meta charset="UTF-8">
-<title>DDA Street Fighter – Prototype avancé</title>
+<title>DDA Street Fighter – Sprites</title>
 <style>
   html, body {
     margin:0;
@@ -45,6 +45,30 @@ var GRAVITY = 0.7;
 
 var keys = {};
 var gameState = "select"; // select | fight | ko
+var assetsLoaded = 0;
+var assetsToLoad = 3; // 3 sprites pour l'instant
+
+// ===============================
+// SPRITES (DOCNESS / LION SCOT / TOI)
+// ===============================
+var sprites = {
+  docness:    { idle: new Image() },
+  lionscot:   { idle: new Image() },
+  dda:        { idle: new Image() }
+};
+
+// chemins vers les fichiers que TU as uploadés
+sprites.docness.idle.src  = "sprites/docness_idle.png";
+sprites.lionscot.idle.src = "sprites/lionscot_idle.png";
+sprites.dda.idle.src      = "sprites/dda_idle.png";
+
+function onAssetLoaded() {
+  assetsLoaded++;
+}
+
+sprites.docness.idle.onload  = onAssetLoaded;
+sprites.lionscot.idle.onload = onAssetLoaded;
+sprites.dda.idle.onload      = onAssetLoaded;
 
 // ===============================
 // ROSTER DES PERSONNAGES
@@ -57,7 +81,8 @@ var heroes = [
     color: "#222222",
     accent: "#FFD700",
     speed: 3.1,
-    power: 9
+    power: 9,
+    spriteId: "docness"
   },
   {
     id: "lion_scot",
@@ -66,7 +91,8 @@ var heroes = [
     color: "#884400",
     accent: "#FFAA00",
     speed: 2.7,
-    power: 7
+    power: 7,
+    spriteId: "lionscot"
   },
   {
     id: "dda",
@@ -75,7 +101,8 @@ var heroes = [
     color: "#444466",
     accent: "#FF44AA",
     speed: 3.4,
-    power: 8
+    power: 8,
+    spriteId: "dda"
   }
 ];
 
@@ -87,7 +114,8 @@ var industry = [
     color: "#111111",
     accent: "#888888",
     speed: 2.8,
-    power: 8
+    power: 8,
+    spriteId: null // pas encore de sprite
   },
   {
     id: "label_lawyer",
@@ -96,7 +124,8 @@ var industry = [
     color: "#222244",
     accent: "#AA0000",
     speed: 3.0,
-    power: 7
+    power: 7,
+    spriteId: null
   },
   {
     id: "ghost_manager",
@@ -105,7 +134,8 @@ var industry = [
     color: "#333333",
     accent: "#00DDDD",
     speed: 3.2,
-    power: 6
+    power: 6,
+    spriteId: null
   },
   {
     id: "ego_rapper",
@@ -114,7 +144,8 @@ var industry = [
     color: "#552244",
     accent: "#FF00FF",
     speed: 3.3,
-    power: 7
+    power: 7,
+    spriteId: null
   },
   {
     id: "angry_rapper",
@@ -123,7 +154,8 @@ var industry = [
     color: "#661111",
     accent: "#FF5500",
     speed: 3.5,
-    power: 6
+    power: 6,
+    spriteId: null
   }
 ];
 
@@ -145,6 +177,7 @@ function createFighter(config, side) {
     speed: config.speed,
     power: config.power,
     side: side,
+    spriteId: config.spriteId,
     x: baseX,
     y: GROUND_Y,
     w: 40,
@@ -155,7 +188,10 @@ function createFighter(config, side) {
     health: 100,
     attacking: false,
     attackTimer: 0,
-    hitCooldown: 0
+    hitCooldown: 0,
+    animState: "idle",   // idle | move | attack | hit | ko
+    animFrame: 0,
+    animTimer: 0
   };
 }
 
@@ -214,8 +250,16 @@ function updateFight() {
 
   // Joueur 1 (toi)
   player1.vx = 0;
-  if (keys["q"]) player1.vx = -player1.speed;
-  if (keys["d"]) player1.vx = player1.speed;
+  player1.animState = "idle";
+
+  if (keys["q"]) {
+    player1.vx = -player1.speed;
+    player1.animState = "move";
+  }
+  if (keys["d"]) {
+    player1.vx = player1.speed;
+    player1.animState = "move";
+  }
 
   if ((keys["z"] || keys["arrowup"]) && player1.onGround) {
     player1.vy = -13;
@@ -225,6 +269,7 @@ function updateFight() {
   if (keys[" "] && !player1.attacking && player1.attackTimer <= 0) {
     player1.attacking = true;
     player1.attackTimer = 10;
+    player1.animState = "attack";
   }
 
   // IA ennemi
@@ -236,8 +281,14 @@ function updateFight() {
   handleAttacks(player1, player2);
   handleAttacks(player2, player1);
 
+  updateAnimation(player1);
+  updateAnimation(player2);
+
   if (player1.health <= 0 || player2.health <= 0) {
     gameState = "ko";
+    player1.animState = "ko";
+    player2.animState = "ko";
+
     if (player1.health <= 0 && player2.health <= 0) {
       winnerText = "Match nul : l’industrie et l’indépendant tombent ensemble...";
     } else if (player1.health <= 0) {
@@ -264,7 +315,9 @@ function applyPhysics(f) {
 
   if (f.attacking) {
     f.attackTimer--;
-    if (f.attackTimer <= 0) f.attacking = false;
+    if (f.attackTimer <= 0) {
+      f.attacking = false;
+    }
   }
 
   if (f.hitCooldown > 0) f.hitCooldown--;
@@ -297,6 +350,7 @@ function handleAttacks(attacker, defender) {
     defender.vx = dir * 4;
     defender.vy = -4;
     defender.onGround = false;
+    defender.animState = "hit";
 
     attacker.hitCooldown = 20;
   }
@@ -311,11 +365,12 @@ function rectsCollide(a, b) {
   );
 }
 
-// IA ennemi simple mais crédible
+// IA ennemi simple
 function aiForPlayer2() {
   if (!player2 || !player1) return;
 
   player2.vx = 0;
+  player2.animState = "idle";
   var distance = player1.x - player2.x;
 
   if (Math.abs(distance) > 90) {
@@ -326,15 +381,28 @@ function aiForPlayer2() {
       player2.vx = -player2.speed * 0.9;
       player2.side = "right";
     }
+    player2.animState = "move";
   } else {
     if (!player2.attacking && Math.random() < 0.06) {
       player2.attacking = true;
       player2.attackTimer = 10;
+      player2.animState = "attack";
     }
     if (player2.onGround && Math.random() < 0.02) {
       player2.vy = -11;
       player2.onGround = false;
     }
+  }
+}
+
+// ===============================
+// ANIMATIONS (simple pour l'instant)
+// ===============================
+function updateAnimation(f) {
+  f.animTimer++;
+  if (f.animTimer > 10) {
+    f.animTimer = 0;
+    f.animFrame = (f.animFrame + 1) % 4; // prêt pour plusieurs frames plus tard
   }
 }
 
@@ -363,21 +431,40 @@ function drawBackground() {
 
 function drawFighter(f) {
   if (!f) return;
-  var bodyX = f.x - f.w / 2;
-  var bodyY = f.y - f.h;
 
+  // Offset animation léger (idle qui “respire”)
+  var animOffsetY = 0;
+  if (f.animState === "idle") {
+    animOffsetY = Math.sin(Date.now() / 250) * 3;
+  }
+
+  var bodyX = f.x - f.w / 2;
+  var bodyY = f.y - f.h + animOffsetY;
+
+  // Ombre
   ctx.fillStyle = "rgba(0,0,0,0.6)";
   ctx.beginPath();
   ctx.ellipse(f.x, f.y + 5, 30, 8, 0, 0, Math.PI * 2);
   ctx.fill();
 
-  ctx.fillStyle = f.color;
-  ctx.fillRect(bodyX, bodyY, f.w, f.h);
+  // Si on a un sprite pour ce perso
+  if (f.spriteId && sprites[f.spriteId] && sprites[f.spriteId].idle && assetsLoaded === assetsToLoad) {
+    var img = sprites[f.spriteId].idle;
+    var drawW = 90;
+    var drawH = 160;
+    var drawX = f.x - drawW / 2;
+    var drawY = f.y - drawH + animOffsetY;
+    ctx.drawImage(img, drawX, drawY, drawW, drawH);
+  } else {
+    // fallback rectangle (pour l'industrie pour l'instant)
+    ctx.fillStyle = f.color;
+    ctx.fillRect(bodyX, bodyY, f.w, f.h);
+    ctx.fillStyle = f.accent;
+    ctx.fillRect(bodyX + 8, bodyY - 18, f.w - 16, 18);
+  }
 
-  ctx.fillStyle = f.accent;
-  ctx.fillRect(bodyX + 8, bodyY - 18, f.w - 16, 18);
-
-  if (f.attacking && f.attackTimer > 0) {
+  // Effet attaque visuel simple
+  if (f.animState === "attack" && f.attacking) {
     var dir = (f.side === "left") ? 1 : -1;
     ctx.fillStyle = "rgba(255,255,255,0.4)";
     ctx.fillRect(bodyX + f.w / 2 + dir * 25, bodyY + 10, 30, 20);
@@ -434,10 +521,15 @@ function drawSelectScreen() {
     ctx.lineWidth = (i === selectedHeroIndex) ? 4 : 2;
     ctx.strokeRect(x - 60, y - 90, 120, 140);
 
-    ctx.fillStyle = h.color;
-    ctx.fillRect(x - 25, y - 60, 50, 70);
-    ctx.fillStyle = h.accent;
-    ctx.fillRect(x - 20, y - 80, 40, 20);
+    // si sprite dispo, on l'affiche, sinon bloc
+    if (sprites[h.spriteId] && sprites[h.spriteId].idle && assetsLoaded === assetsToLoad) {
+      ctx.drawImage(sprites[h.spriteId].idle, x - 35, y - 90, 70, 120);
+    } else {
+      ctx.fillStyle = h.color;
+      ctx.fillRect(x - 25, y - 60, 50, 70);
+      ctx.fillStyle = h.accent;
+      ctx.fillRect(x - 20, y - 80, 40, 20);
+    }
 
     ctx.fillStyle = "#ffffff";
     ctx.font = "16px system-ui";
@@ -495,6 +587,17 @@ function wrapTextCentered(text, cx, startY, maxWidth, lineHeight) {
 // BOUCLE PRINCIPALE
 // ===============================
 function gameLoop() {
+  // temps que les sprites se chargent
+  if (assetsLoaded < assetsToLoad) {
+    ctx.fillStyle = "#000";
+    ctx.fillRect(0,0,canvas.width,canvas.height);
+    ctx.fillStyle = "#FFF";
+    ctx.font = "18px system-ui";
+    ctx.fillText("Chargement des sprites... ("+assetsLoaded+"/"+assetsToLoad+")", 20, 40);
+    requestAnimationFrame(gameLoop);
+    return;
+  }
+
   if (gameState === "select") {
     drawSelectScreen();
   } else if (gameState === "fight") {
@@ -525,3 +628,4 @@ gameLoop();
 
 </body>
 </html>
+
